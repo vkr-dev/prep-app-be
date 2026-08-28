@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+chroma_data/
+
+# Local SQLite dev DB (dummy .env points here until Neon is wired up)
+*.db
+*.sqlite3
+
+# IDEs
+.idea/
+.vscode/
