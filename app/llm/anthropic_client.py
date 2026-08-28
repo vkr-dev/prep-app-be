@@ -1,42 +1,52 @@
 """The single point of contact with the LLM provider.
 
-Swappable by design: every other module imports generate_questions() and the
-GeneratedQuestionSet type, never the Anthropic SDK directly. To hand a cheap
-step to a free-tier provider (Groq/Gemini) later, reimplement this function's
-body against that SDK - callers don't change.
+Swappable by design: every pipeline step calls call_structured() and never
+imports the Anthropic SDK directly. To hand a step to a free-tier provider
+(Groq/Gemini) later, reimplement this function's body against that SDK -
+callers don't change.
 """
 
+import time
+from dataclasses import dataclass
+from typing import TypeVar
+
 from anthropic import Anthropic
+from pydantic import BaseModel
 
 from app.config import settings
-from app.schemas.generate import GeneratedQuestionSet
 
 _client = Anthropic(api_key=settings.anthropic_api_key)
 
-SYSTEM_PROMPT = (
-    "You are an expert technical interviewer. Given a topic, generate a "
-    "structured set of interview questions with sample answers. Cover a "
-    "range of difficulty (easy, medium, hard) and group questions into "
-    "meaningful subtopic categories."
-)
+T = TypeVar("T", bound=BaseModel)
 
 
-def generate_questions(topic: str, count: int = 10) -> GeneratedQuestionSet:
-    """One Anthropic call, structured JSON out. No RAG/agent loop yet -
-    Day 2 replaces this single call with the four-step pipeline (plan ->
-    generate -> dedupe/refine -> categorize), each step reusing this same
-    call-the-model pattern.
+@dataclass
+class LlmCallResult:
+    parsed: BaseModel
+    input_tokens: int
+    output_tokens: int
+    latency_ms: float
+
+
+def call_structured(system: str, user_message: str, output_format: type[T], max_tokens: int = 4096) -> LlmCallResult:
+    """One Anthropic call, structured JSON out via messages.parse() - Claude's
+    response is validated straight into output_format, no manual json.loads().
+    Also captures latency and token usage for the caller to feed into a
+    RunTracker (see app/observability/logging_utils.py).
     """
+    start = time.perf_counter()
     response = _client.messages.parse(
         model=settings.anthropic_model,
-        max_tokens=4096,
-        system=SYSTEM_PROMPT,
-        messages=[
-            {
-                "role": "user",
-                "content": f"Generate {count} interview questions for the topic: {topic}",
-            }
-        ],
-        output_format=GeneratedQuestionSet,
+        max_tokens=max_tokens,
+        system=system,
+        messages=[{"role": "user", "content": user_message}],
+        output_format=output_format,
     )
-    return response.parsed_output
+    latency_ms = (time.perf_counter() - start) * 1000
+
+    return LlmCallResult(
+        parsed=response.parsed_output,
+        input_tokens=response.usage.input_tokens,
+        output_tokens=response.usage.output_tokens,
+        latency_ms=latency_ms,
+    )

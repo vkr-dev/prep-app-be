@@ -9,6 +9,8 @@ from app.auth.routes import router as auth_router
 from app.config import settings
 from app.db import engine, init_db
 from app.models.user import User, UserStatus
+from app.observability.logging_utils import configure_json_logging
+from app.rag.corpus import build_reference_index
 
 
 def bootstrap_owner() -> None:
@@ -30,8 +32,10 @@ def bootstrap_owner() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_json_logging()
     init_db()
     bootstrap_owner()
+    build_reference_index()  # Chroma is ephemeral - rebuild from the seed corpus every startup
     yield
 
 
