@@ -59,7 +59,10 @@ def generate_candidate_questions(
         f"Generate {target_count} interview questions covering these subtopics."
     )
 
-    result = call_structured(system, user_message, QuestionBatch, max_tokens=6000)
+    # Generous headroom: answers run longer than expected in practice, and a
+    # truncated JSON response fails Pydantic validation outright rather than
+    # degrading gracefully - better to overpay a little than fail the run.
+    result = call_structured(system, user_message, QuestionBatch, max_tokens=10000)
     tracker.record_llm_call("generate_candidates", result.latency_ms, result.input_tokens, result.output_tokens)
     return result.parsed.questions
 
@@ -104,7 +107,7 @@ def dedupe_and_refine(
         f"Generate {missing} new, distinct questions to add to the set."
     )
 
-    result = call_structured(system, user_message, QuestionBatch)
+    result = call_structured(system, user_message, QuestionBatch, max_tokens=6000)
     tracker.record_llm_call("refine_topup", result.latency_ms, result.input_tokens, result.output_tokens)
     return (kept + result.parsed.questions)[:target_count]
 

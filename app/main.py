@@ -8,6 +8,7 @@ from app.api.routes import router as api_router
 from app.auth.routes import router as auth_router
 from app.config import settings
 from app.db import engine, init_db
+from app.models.question_cache import QuestionSetCache  # noqa: F401 - registers the table with SQLModel.metadata
 from app.models.user import User, UserStatus
 from app.observability.logging_utils import configure_json_logging
 from app.rag.corpus import build_reference_index

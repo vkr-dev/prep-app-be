@@ -53,6 +53,7 @@ app/
   config.py         Settings from env (.env locally, real env vars on Render)
   db.py             SQLModel engine/session (Neon Postgres)
   models/user.py    SQLModel User table
+  models/question_cache.py  SQLModel shared topic-cache table
   schemas/          Pydantic request/response models (auth, generate, pipeline)
   auth/             security (hash/JWT), deps (guard), routes (register/login/approve/revoke)
   llm/              Anthropic client wrapper - the only module that talks to the LLM
@@ -77,6 +78,12 @@ scripts/hash_password.py   generates OWNER_PASSWORD_HASH
 Every step's latency and (for LLM calls) token usage is captured in a `RunTracker` and logged as one JSON line per step to stdout, plus a final `run_completed` summary line. That same data comes back in the API response (`eval` + `metrics`) for the Angular UI to render alongside the questions.
 
 A failed Anthropic call (bad key, rate limit, outage) surfaces as `502` with a `{"detail": "LLM provider error: ..."}` body, not a bare `500` - the frontend distinguishes this from an app bug.
+
+## Shared topic cache
+
+`POST /api/generate` checks a Postgres-backed cache (`app/agent/cache.py`, table `questionsetcache`) before running the pipeline at all. The cache key is the topic normalized (lowercased, whitespace-collapsed) - **not** per-user. The first person to ask about "SQL" pays for the full pipeline run; every later request for "SQL" (or "sql", or "  SQL  " - any user, including a different one) is served straight from the DB, with `from_cache: true` and zero token usage in the response. This is exact-match only, not embedding-similarity matching - "SQL" and "SQL joins" are different cache entries by design.
+
+There's no cache invalidation yet - an entry lives forever until manually deleted from the table. Fine for now; a "regenerate" bypass is an easy follow-up if question sets need to be refreshed later.
 
 ## Status
 

@@ -58,3 +58,7 @@ class GenerateResult(BaseModel):
     questions: list[Question]
     eval: EvalReport
     metrics: RunMetrics
+    # True when this response came from the shared topic cache instead of a
+    # fresh pipeline run - metrics reflect the cheap cache lookup, not the
+    # original run's real cost.
+    from_cache: bool = False
