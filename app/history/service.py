@@ -14,6 +14,7 @@ from sqlmodel import Session, select
 from app.llm.client import call_structured
 from app.models.search_history import SearchHistory
 from app.models.topic_label import TopicLabel
+from app.observability.logging_utils import log_event
 from app.schemas.search_history import (
     SearchHistoryGroup,
     SearchHistoryItem,
@@ -21,6 +22,19 @@ from app.schemas.search_history import (
     TopicLabelResult,
 )
 from app.topic_key import normalize_topic
+
+_FALLBACK_CATEGORY = "Uncategorized"
+
+
+def _fallback_label(topic: str, key: str) -> TopicLabel:
+    """A topic gets this heuristic label when the LLM categorization call
+    fails, instead of losing the search entirely (see record_search) - a
+    plain title-cased truncation of the topic itself, grouped into a
+    catch-all category. Never touches the LLM, so it can't fail the way the
+    real categorization call can."""
+    words = topic.strip().split()
+    short_label = " ".join(words[:3]).title()[:24] or topic[:24]
+    return TopicLabel(topic_key=key, topic=topic, short_label=short_label, category=_FALLBACK_CATEGORY)
 
 
 def get_or_create_topic_label(topic: str, session: Session) -> TopicLabel:
@@ -40,14 +54,26 @@ def get_or_create_topic_label(topic: str, session: Session) -> TopicLabel:
     categories_block = ", ".join(existing_categories) if existing_categories else "(none yet - this is the first topic)"
     user_message = f"Topic: {topic}\n\nExisting categories: {categories_block}"
 
-    result = call_structured(system, user_message, TopicLabelResult, max_tokens=200)
+    # This LLM call is a nice-to-have (a tidy button label + grouping), not
+    # something the search itself should ever depend on - degrade to a
+    # heuristic label rather than raise, so a flaky/rate-limited provider
+    # can never prevent record_search() below from actually saving the
+    # search. Confirmed live: this used to silently drop every new topic's
+    # search history whenever categorization failed (Groq structured-output
+    # errors), since the exception propagated out of record_search entirely
+    # before the SearchHistory row was ever written.
+    try:
+        result = call_structured(system, user_message, TopicLabelResult, max_tokens=200)
+        label = TopicLabel(
+            topic_key=key,
+            topic=topic,
+            short_label=result.parsed.short_label,
+            category=result.parsed.category,
+        )
+    except Exception as e:
+        log_event("topic_label_generation_failed", topic=topic, error=str(e))
+        label = _fallback_label(topic, key)
 
-    label = TopicLabel(
-        topic_key=key,
-        topic=topic,
-        short_label=result.parsed.short_label,
-        category=result.parsed.category,
-    )
     session.add(label)
     try:
         session.commit()
