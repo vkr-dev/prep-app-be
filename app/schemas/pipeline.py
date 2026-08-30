@@ -54,13 +54,22 @@ class SubtopicContent(BaseModel):
     """Reading content for one subtopic - shown above that subtopic's
     accordion of practice questions, so there's real explanatory material
     to read end-to-end before self-testing, not just an isolated Q&A list.
-    Empty/absent for LLM-pipeline results for now (the agent loop doesn't
-    generate this) - only populated for curated content, see
-    scripts/seed_curated_topics.py. The frontend simply skips rendering the
-    reading section when a subtopic has no matching entry here."""
+    Populated for every result - curated content authors it by hand (see
+    scripts/seed_curated_topics.py), the LLM pipeline generates it via the
+    explain step (app/agent/steps.py:explain_subtopics()) - so an LLM-backed
+    search looks and reads the same as a curated one. The frontend skips
+    rendering the reading section only in the rare case a subtopic has no
+    matching entry here (e.g. an older cached result predating this step)."""
 
     subtopic: str
     content: str
+
+
+class SubtopicContentBatch(BaseModel):
+    """Output of the explain step - one SubtopicContent per final subtopic,
+    same order as given. See app/agent/steps.py:explain_subtopics()."""
+
+    contents: list[SubtopicContent]
 
 
 class GenerateResult(BaseModel):

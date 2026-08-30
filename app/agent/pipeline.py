@@ -9,6 +9,7 @@ from app.agent.eval import check_duplication, score_relevance
 from app.agent.steps import (
     categorize_by_difficulty,
     dedupe_and_refine,
+    explain_subtopics,
     generate_candidate_questions,
     plan_subtopics,
 )
@@ -35,6 +36,14 @@ def run_pipeline(topic: str, target_count: int = DEFAULT_TARGET_COUNT) -> Genera
     )
     deduped = dedupe_and_refine(topic, candidates, target_count, tracker)
     final_set = categorize_by_difficulty(topic, deduped, tracker)
+
+    # Runs against the FINAL, normalized subtopic names (post-categorize),
+    # not the plan step's initial guess, so every content entry's key
+    # matches a real question category the frontend groups by. Order
+    # preserved, deduped, matching how the frontend itself groups questions
+    # into subtopic sections (see generate.ts's `groups` computed).
+    final_subtopics = list(dict.fromkeys(q.category for q in final_set.questions))
+    subtopic_content = explain_subtopics(topic, final_subtopics, reference_chunks, tracker)
 
     relevance_scores = score_relevance(topic, final_set.questions, tracker)
     max_similarity, duplication_flagged = check_duplication(final_set.questions, tracker)
@@ -65,6 +74,7 @@ def run_pipeline(topic: str, target_count: int = DEFAULT_TARGET_COUNT) -> Genera
     return GenerateResult(
         topic=final_set.topic,
         questions=final_set.questions,
+        subtopic_content=subtopic_content,
         eval=eval_report,
         metrics=metrics,
     )

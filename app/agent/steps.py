@@ -10,7 +10,7 @@ from app.llm.client import call_structured
 from app.observability.logging_utils import RunTracker, log_event
 from app.rag.embeddings import cosine_similarity_matrix, embed_texts
 from app.schemas.generate import GeneratedQuestionSet, Question
-from app.schemas.pipeline import CategorizationResult, QuestionBatch, SubtopicPlan
+from app.schemas.pipeline import CategorizationResult, QuestionBatch, SubtopicContent, SubtopicContentBatch, SubtopicPlan
 
 # Candidate questions whose cosine similarity to an already-kept question
 # exceeds this are treated as near-duplicates and dropped. Tuned loosely -
@@ -158,3 +158,46 @@ def categorize_by_difficulty(topic: str, questions: list[Question], tracker: Run
         for i, question in enumerate(questions)
     ]
     return GeneratedQuestionSet(topic=topic, questions=relabeled)
+
+
+def explain_subtopics(
+    topic: str,
+    subtopics: list[str],
+    reference_chunks: list[str],
+    tracker: RunTracker,
+) -> list[SubtopicContent]:
+    """Step 5: explain. Runs after categorize, against the FINAL, normalized
+    subtopic names (not the plan step's initial guess) so every content
+    entry's key matches a real question category the frontend groups by -
+    an LLM-backed search should read the same way a curated one does:
+    explanatory content first, practice questions in the accordion after,
+    not just an isolated Q&A list. Falls back to an empty list (never
+    raises) on failure - a search should still return its questions even
+    if the explanatory writeup couldn't be generated that one time; the
+    frontend already tolerates a subtopic having no reading content."""
+    system = (
+        "You are an expert technical educator. For each of the given subtopics "
+        "of the given technical topic, write a clear, thorough explanation "
+        "(2 short paragraphs) suitable for someone learning the concept from "
+        "scratch - as if it were the reading material in a study guide, read "
+        "before attempting practice questions on that subtopic. Ground your "
+        "explanation in the provided reference material where relevant, but "
+        "you are not limited to it. Return exactly one entry per subtopic, in "
+        "the same order given, with the subtopic field matching the given name "
+        "exactly."
+    )
+    reference_block = "\n".join(f"- {chunk}" for chunk in reference_chunks) or "(no reference material retrieved)"
+    user_message = (
+        f"Topic: {topic}\n"
+        f"Subtopics: {', '.join(subtopics)}\n\n"
+        f"Reference material:\n{reference_block}"
+    )
+
+    try:
+        result = call_structured(system, user_message, SubtopicContentBatch, max_tokens=4000)
+    except Exception as e:
+        log_event("explain_subtopics_failed", topic=topic, error=str(e))
+        return []
+
+    tracker.record_llm_call("explain_subtopics", result.latency_ms, result.input_tokens, result.output_tokens)
+    return result.parsed.contents
