@@ -27,13 +27,14 @@ Tracking doc for going live: Render (backend web service + frontend static site)
   - `OWNER_PASSWORD_HASH`
   - `DATABASE_URL` (the same Neon pooled connection string)
   - `CORS_ALLOW_ORIGINS` - leave as anything for now (e.g. `http://localhost:4200`); it gets a real value in Phase 4, after the frontend exists
-- [ ] Deploy, wait for the build to finish
-- [ ] **Give me the resulting backend URL** (looks like `https://prep-app-be-xxxx.onrender.com`)
+- [x] Deploy, wait for the build to finish
+- [x] **Give me the resulting backend URL** - `https://prep-app-be.onrender.com`, confirmed live: `/api/health` returns 200, `/api/generate` with no token correctly returns 401
 
 ## Phase 3 — Point the frontend at the real backend (me, once I have the URL)
 
-- [ ] Update `prep-app-ui/src/environments/environment.ts` - replace the `REPLACE-ME` placeholder with the real backend URL
-- [ ] Commit + push
+- [x] Update `prep-app-ui/src/environments/environment.ts` - replaced the `REPLACE-ME` placeholder with `https://prep-app-be.onrender.com`
+- [x] Verified the production build actually embeds that URL in the compiled bundle
+- [x] Commit + push
 
 ## Phase 4 — Frontend goes live **[MANUAL]**
 
