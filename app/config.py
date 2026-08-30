@@ -5,12 +5,23 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # --- LLM ---
-    anthropic_api_key: str
+    # "anthropic" or "google" - selects which app/llm/*_client.py implements
+    # call_structured() for every pipeline step. See app/llm/client.py.
+    # Swap providers with this one setting, no code change.
+    llm_provider: str = "anthropic"
+
+    # Only the active provider's key needs to actually be set - both default
+    # to empty so an unused provider never blocks startup.
+    anthropic_api_key: str = ""
     # Default is Sonnet 5, not Opus: this is a personal project where every
     # generation call is real spend, and Sonnet is cheap enough here to be a
     # non-issue while staying plenty capable for structured Q&A generation.
     # Bump to "claude-opus-5" any time by changing this one value.
     anthropic_model: str = "claude-sonnet-5"
+
+    google_api_key: str = ""
+    # Google AI Studio's free tier - the cheap/free swap-in slot from context.md.
+    google_model: str = "gemini-3.6-flash"
 
     # --- Auth ---
     jwt_secret: str

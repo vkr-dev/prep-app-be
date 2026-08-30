@@ -13,7 +13,9 @@ cp .env.example .env
 
 Fill in `.env`:
 
+- `LLM_PROVIDER` - `anthropic` or `google`. Only that provider's key below needs to be set.
 - `ANTHROPIC_API_KEY` - from console.anthropic.com (separate from Claude.ai / Claude Code auth).
+- `GOOGLE_API_KEY` - from aistudio.google.com, free tier. Good for dev/test iteration without spending Anthropic credit - same pipeline, same schemas, just cheaper/faster for exploratory runs.
 - `JWT_SECRET` - `python -c "import secrets; print(secrets.token_urlsafe(32))"`
 - `OWNER_EMAIL` - your login email.
 - `OWNER_PASSWORD_HASH` - `python scripts/hash_password.py`, paste the printed line.
@@ -56,7 +58,7 @@ app/
   models/question_cache.py  SQLModel shared topic-cache table
   schemas/          Pydantic request/response models (auth, generate, pipeline)
   auth/             security (hash/JWT), deps (guard), routes (register/login/approve/revoke)
-  llm/              Anthropic client wrapper - the only module that talks to the LLM
+  llm/              client.py picks the active provider (LLM_PROVIDER); anthropic_client.py / google_client.py implement the same call_structured() interface
   rag/              seed corpus, Chroma retrieval, shared embedding/cosine-similarity helpers
   agent/            the 4 pipeline steps (plan/generate/dedupe-refine/categorize), eval, orchestration
   observability/    structured JSON logging + the RunTracker that feeds latency/token metrics
@@ -69,15 +71,17 @@ scripts/hash_password.py   generates OWNER_PASSWORD_HASH
 `POST /api/generate` runs a plain-Python agent loop, no framework:
 
 1. **RAG retrieve** - embed the topic, pull the 4 nearest chunks from a small seed corpus (`app/rag/seed_corpus.py`) via a local Chroma collection (ephemeral, rebuilt from the seed corpus on every startup).
-2. **Plan** - Claude breaks the topic into 4-6 subtopics.
-3. **Generate** - Claude generates questions across those subtopics, grounded in the retrieved reference chunks. Over-generates a few extra, since dedup will remove some.
-4. **Dedupe/refine** - candidate questions are embedded (same Chroma embedding function as step 1) and near-duplicates (cosine similarity > 0.88) are dropped. If that drops the count below target, one more Claude call tops it back up, explicitly told what's already covered.
-5. **Categorize** - Claude normalizes category names and re-verifies each question's difficulty label across the whole set. It only returns index + labels, never question/answer text, so it can't accidentally rewrite content.
+2. **Plan** - the LLM breaks the topic into 4-6 subtopics.
+3. **Generate** - the LLM generates questions across those subtopics, grounded in the retrieved reference chunks. Over-generates a few extra, since dedup will remove some.
+4. **Dedupe/refine** - candidate questions are embedded (same Chroma embedding function as step 1) and near-duplicates (cosine similarity > 0.88) are dropped. If that drops the count below target, one more LLM call tops it back up, explicitly told what's already covered.
+5. **Categorize** - the LLM normalizes category names and re-verifies each question's difficulty label across the whole set. It only returns index + labels, never question/answer text, so it can't accidentally rewrite content.
 6. **Eval** - LLM-as-judge relevance score (1-5) per question, plus a cosine-similarity duplication check on the final set (flagged, not enforced - a report, not a rewrite).
+
+"The LLM" is whichever provider `LLM_PROVIDER` selects (`app/llm/client.py`) - every step calls `call_structured()` and never imports a provider SDK directly, so this list holds regardless of which one is active.
 
 Every step's latency and (for LLM calls) token usage is captured in a `RunTracker` and logged as one JSON line per step to stdout, plus a final `run_completed` summary line. That same data comes back in the API response (`eval` + `metrics`) for the Angular UI to render alongside the questions.
 
-A failed Anthropic call (bad key, rate limit, outage) surfaces as `502` with a `{"detail": "LLM provider error: ..."}` body, not a bare `500` - the frontend distinguishes this from an app bug.
+A failed provider call (bad key, rate limit, outage) surfaces as `502` with a `{"detail": "LLM provider error: ..."}` body; a response that came back but never parsed into the expected schema (safety refusal/block, or malformed JSON that survived one retry) surfaces as `502` with `{"detail": "LLM output error: ..."}`. Either way, not a bare `500` - the frontend distinguishes provider failures from an app bug.
 
 ## Shared topic cache
 
@@ -87,4 +91,4 @@ There's no cache invalidation yet - an entry lives forever until manually delete
 
 ## Status
 
-Day 2: full agentic RAG pipeline (plan -> generate -> dedupe/refine -> categorize) + eval + observability, working locally behind login. Deploy (Render + Neon, CORS lockdown, cold-start handling) is Day 3.
+Day 2: full agentic RAG pipeline (plan -> generate -> dedupe/refine -> categorize) + eval + observability, working locally behind login, verified end-to-end against real Neon Postgres with both Anthropic and Google as the active `LLM_PROVIDER`. Deploy (Render + Neon, CORS lockdown, cold-start handling) is Day 3.

@@ -6,6 +6,7 @@ from app.agent.cache import get_cached_result, save_to_cache
 from app.agent.pipeline import run_pipeline
 from app.auth.deps import get_current_user
 from app.db import get_session
+from app.llm.client import LlmOutputError
 from app.models.user import User
 from app.schemas.generate import GenerateRequest
 from app.schemas.pipeline import GenerateResult
@@ -39,6 +40,10 @@ def generate(
         # distinct status so the frontend can tell "the LLM provider failed"
         # apart from "this app has a bug" (a bare 500).
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"LLM provider error: {e.message}") from e
+    except LlmOutputError as e:
+        # Claude responded but never gave usable structured output (refusal,
+        # or a parse failure that survived the wrapper's retry).
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"LLM output error: {e}") from e
 
     save_to_cache(payload.topic, result, session)
     return result

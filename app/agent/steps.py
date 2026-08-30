@@ -6,7 +6,7 @@ messages.parse()).
 
 import time
 
-from app.llm.anthropic_client import call_structured
+from app.llm.client import call_structured
 from app.observability.logging_utils import RunTracker
 from app.rag.embeddings import cosine_similarity_matrix, embed_texts
 from app.schemas.generate import GeneratedQuestionSet, Question
