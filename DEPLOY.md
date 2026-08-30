@@ -44,16 +44,16 @@ Tracking doc for going live: Render (backend web service + frontend static site)
 
 ## Phase 5 — Lock CORS to the real frontend origin **[MANUAL]**
 
-- [ ] In the Render dashboard, on the **backend** service's Environment tab, set `CORS_ALLOW_ORIGINS` to `https://prep-app-ui.onrender.com` (no trailing slash)
-- [ ] Save - Render redeploys the backend automatically with the new value
+- [x] Set `CORS_ALLOW_ORIGINS=https://prep-app-ui.onrender.com` in the backend's Environment tab, saved
+- [x] Verified remotely: a preflight from `https://prep-app-ui.onrender.com` gets `access-control-allow-origin` back correctly; the same preflight from `http://localhost:4200` is now rejected (400, no CORS header) - the lock is real, not just set and unverified
 
-## Phase 6 — Verify (me, remotely, once both URLs exist)
+## Phase 6 — Verify
 
-- [ ] `curl` the live backend's `/api/health` - confirm it responds without a token
-- [ ] `curl` the live backend's `/api/generate` with **no** token - confirm it's rejected (401), i.e. the public genuinely cannot hit it
-- [ ] Log in as owner against the live backend, confirm a real generate call works end-to-end
-- [ ] Open the live frontend URL, confirm it loads and can talk to the live backend (no CORS errors)
-- [ ] You do a final check from your phone - open the frontend URL, log in, generate a topic
+- [x] `curl` the live backend's `/api/health` - responds without a token
+- [x] `curl` the live backend's `/api/generate` with **no** token - correctly rejected (401)
+- [x] Logged in as owner and generated a topic against the live backend, through the real UI - confirmed by the user
+- [x] Frontend loads and talks to the live backend with no CORS errors (implied by the above working through the real browser UI, and confirmed independently via the preflight check above)
+- [ ] Final check from your phone - open the frontend URL, log in, generate a topic (optional at this point, everything's already confirmed working - just for your own peace of mind on a different device/network)
 
 ## Known, accepted tradeoffs (already in context.md, not new)
 
