@@ -1,7 +1,9 @@
 from enum import Enum
 from typing import List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+MAX_TOPIC_WORDS = 50
 
 
 class Difficulty(str, Enum):
@@ -18,7 +20,15 @@ class Question(BaseModel):
 
 
 class GenerateRequest(BaseModel):
-    topic: str = Field(min_length=1, max_length=200)
+    topic: str = Field(min_length=1, max_length=400)
+
+    @field_validator("topic")
+    @classmethod
+    def limit_words(cls, v: str) -> str:
+        word_count = len(v.split())
+        if word_count > MAX_TOPIC_WORDS:
+            raise ValueError(f"Topic must be {MAX_TOPIC_WORDS} words or fewer (got {word_count})")
+        return v
 
 
 class GeneratedQuestionSet(BaseModel):

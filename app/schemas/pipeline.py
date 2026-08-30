@@ -50,15 +50,34 @@ class RunMetrics(BaseModel):
     total_output_tokens: int
 
 
+class SubtopicContent(BaseModel):
+    """Reading content for one subtopic - shown above that subtopic's
+    accordion of practice questions, so there's real explanatory material
+    to read end-to-end before self-testing, not just an isolated Q&A list.
+    Empty/absent for LLM-pipeline results for now (the agent loop doesn't
+    generate this) - only populated for curated content, see
+    scripts/seed_curated_topics.py. The frontend simply skips rendering the
+    reading section when a subtopic has no matching entry here."""
+
+    subtopic: str
+    content: str
+
+
 class GenerateResult(BaseModel):
     """The full response shape for POST /api/generate - the question set
     plus the eval and observability data the UI surfaces alongside it."""
 
     topic: str
     questions: list[Question]
+    subtopic_content: list[SubtopicContent] = []
     eval: EvalReport
     metrics: RunMetrics
     # True when this response came from the shared topic cache instead of a
     # fresh pipeline run - metrics reflect the cheap cache lookup, not the
     # original run's real cost.
     from_cache: bool = False
+    # True for hand-authored content seeded directly into the DB (see
+    # scripts/seed_curated_topics.py) - never ran the LLM pipeline at all,
+    # not even once. Distinct from from_cache, which just means "not paid
+    # for on this particular request" - curated content was never paid for.
+    curated: bool = False

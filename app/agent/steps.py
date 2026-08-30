@@ -7,7 +7,7 @@ messages.parse()).
 import time
 
 from app.llm.client import call_structured
-from app.observability.logging_utils import RunTracker
+from app.observability.logging_utils import RunTracker, log_event
 from app.rag.embeddings import cosine_similarity_matrix, embed_texts
 from app.schemas.generate import GeneratedQuestionSet, Question
 from app.schemas.pipeline import CategorizationResult, QuestionBatch, SubtopicPlan
@@ -77,10 +77,21 @@ def dedupe_and_refine(
     greedily drops near-duplicates by cosine similarity (pure function, no
     LLM call). If dedup drops the count below target, one refine call tops
     it back up, explicitly told what's already covered so it doesn't just
-    reintroduce the duplicates that were removed."""
+    reintroduce the duplicates that were removed.
+
+    If embedding fails (provider outage/quota, e.g. Google's separate
+    embedding quota - see app/rag/embeddings.py), dedup is skipped rather
+    than failing the whole generate request - a request should still
+    return question, just without duplicate-filtering that one time,
+    consistent with RAG retrieval's degrade-not-crash behavior."""
     start = time.perf_counter()
-    vectors = embed_texts([q.question for q in candidates])
-    similarity = cosine_similarity_matrix(vectors)
+    try:
+        vectors = embed_texts([q.question for q in candidates])
+        similarity = cosine_similarity_matrix(vectors)
+    except Exception as e:
+        log_event("dedupe_embedding_failed", topic=topic, error=str(e))
+        tracker.record_step("dedupe", (time.perf_counter() - start) * 1000)
+        return candidates[:target_count]
 
     kept: list[Question] = []
     kept_indices: list[int] = []

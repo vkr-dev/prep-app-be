@@ -13,10 +13,10 @@ services:
       - key: PYTHON_VERSION
         value: 3.10.13
 
-      # "1" = Anthropic, "2" = Google - see app/llm/client.py. Only the
-      # active provider's key needs a real value for TEXT GENERATION -
-      # but GOOGLE_API_KEY is required either way, since RAG/dedup
-      # embeddings always use Google's API (see app/rag/embeddings.py).
+      # "1" = Anthropic, "2" = Google, "3" = Groq - see app/llm/client.py.
+      # Only the active provider's key needs a real value for TEXT
+      # GENERATION - but GOOGLE_API_KEY is required either way, since
+      # RAG/dedup embeddings always use Google's API (see app/rag/embeddings.py).
       - key: LLM_PROVIDER
         sync: false
       - key: ANTHROPIC_API_KEY
@@ -27,6 +27,10 @@ services:
         sync: false
       - key: GOOGLE_MODEL
         value: gemini-3.6-flash
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: qwen/qwen3.6-27b
 
       - key: JWT_SECRET
         sync: false

@@ -56,13 +56,16 @@ app/
   db.py             SQLModel engine/session (Neon Postgres)
   models/user.py    SQLModel User table
   models/question_cache.py  SQLModel shared topic-cache table
-  schemas/          Pydantic request/response models (auth, generate, pipeline)
+  models/topic_label.py     SQLModel shared AI-categorized topic label table
+  models/search_history.py SQLModel per-user search history table
+  schemas/          Pydantic request/response models (auth, generate, pipeline, search_history)
   auth/             security (hash/JWT), deps (guard), routes (register/login/approve/revoke)
   llm/              client.py picks the active provider (LLM_PROVIDER); anthropic_client.py / google_client.py implement the same call_structured() interface
   rag/              seed corpus, Chroma retrieval, shared embedding/cosine-similarity helpers
-  agent/            the 4 pipeline steps (plan/generate/dedupe-refine/categorize), eval, orchestration
+  agent/            the 4 pipeline steps (plan/generate/dedupe-refine/categorize), eval, orchestration, shared question cache
+  history/          per-user search history + shared AI topic categorization (see below)
   observability/    structured JSON logging + the RunTracker that feeds latency/token metrics
-  api/routes.py     /api/health (public), /api/generate (protected)
+  api/routes.py     /api/health (public), /api/generate + /api/search-history (protected)
 scripts/hash_password.py   generates OWNER_PASSWORD_HASH
 ```
 
@@ -89,6 +92,22 @@ A failed provider call (bad key, rate limit, outage) surfaces as `502` with a `{
 
 There's no cache invalidation yet - an entry lives forever until manually deleted from the table. Fine for now; a "regenerate" bypass is an easy follow-up if question sets need to be refreshed later.
 
+## Per-user search history + AI topic categorization
+
+`POST /api/generate` also records the search into `GET /api/search-history` (`app/history/service.py`) - unlike the question cache, this table (`searchhistory`) is per-user, since it's each user's own list of past searches. Re-searching a topic bumps its timestamp rather than duplicating it.
+
+Every topic also gets a short label + category (`table topiclabel`) - **shared** across all users, same normalized-topic-key pattern as the question cache. The LLM is only called to assign a label the *first time anyone ever searches a topic*; every later search of it (any user) reuses the stored row. When a genuinely new topic does need labeling, the LLM is shown every existing category already in the table and told to reuse one if it fits (matched by meaning, not exact wording) - this is what makes "Java Streams" and "Java Generics" land in the same "Java" group instead of each inventing a slightly different category name.
+
+`GenerateRequest.topic` is capped at 50 words (`app/schemas/generate.py`), enforced both server-side (a Pydantic validator) and client-side (the search page disables submit past the limit).
+
+## Curated content (no LLM) + subtopic progress tracking
+
+`scripts/seed_curated_topics.py` inserts hand-authored, comprehensive content directly into the DB for a few topics (currently Java, Spring Boot, RAG, LangChain) - no LLM call anywhere in that script. It reuses the exact same tables as LLM-generated content (`save_to_cache`, `TopicLabel`, `SearchHistory`), so these topics are just instant, zero-token cache hits from the moment the script runs, indistinguishable in shape from anything the pipeline produces except `GenerateResult.curated: true`, which the UI uses to show an honest "human-curated" badge instead of "served from cache." Safe to re-run - every insert is an upsert. Java and Spring Boot share the `"Java"` category (and RAG/LangChain share `"AI/LLM"`), so they group together on the search page exactly like same-topic LLM-categorized searches would.
+
+Each curated topic is organized into subtopics (the `Question.category` field doubles as the subtopic name), each with two parts: real reading content (`GenerateResult.subtopic_content`, a `SubtopicContent` list of `{subtopic, content}` - several paragraphs of original explanatory prose per subtopic, meant to be read end-to-end before self-testing) and 8 question/answer pairs spanning easy/medium/hard. The frontend renders the reading content as an always-visible card and scopes the collapsible accordion to only the practice questions, not the reading material - a deliberate split so the page reads as a genuine one-stop-shop rather than just a Q&A list. `subtopic_content` is empty for LLM-generated topics today (the agent pipeline doesn't produce reading content, only questions), and the frontend simply skips the reading card for those subtopics. In total: 7 subtopics/56 questions each for Java and Spring Boot, 6 subtopics/48 questions each for RAG and LangChain - 208 real Q&A pairs and 26 reading passages across the 4 curated topics.
+
+`SubtopicProgress` (table `subtopicprogress`, endpoints `GET`/`POST /api/progress`) tracks a per-user "I've reviewed this subtopic" checkbox, independent of search history - this is what drives the progress bar on the generate page. It works the same way for LLM-generated topics too, since it's keyed on topic + subtopic name, not on whether the content was curated.
+
 ## Status
 
-Day 2: full agentic RAG pipeline (plan -> generate -> dedupe/refine -> categorize) + eval + observability, working locally behind login, verified end-to-end against real Neon Postgres with both Anthropic and Google as the active `LLM_PROVIDER`. Deploy (Render + Neon, CORS lockdown, cold-start handling) is Day 3.
+Day 2: full agentic RAG pipeline (plan -> generate -> dedupe/refine -> categorize) + eval + observability, working locally behind login, verified end-to-end against real Neon Postgres with both Anthropic and Google as the active `LLM_PROVIDER`. Day 3 (Render + Neon, CORS lockdown) is live. Since then: per-user search history with AI-assisted, DB-persisted topic categorization, and a 50-word cap on the topic field.

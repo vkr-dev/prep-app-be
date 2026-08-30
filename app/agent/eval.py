@@ -7,7 +7,7 @@ step's job); this is observability, not enforcement.
 import time
 
 from app.llm.client import call_structured
-from app.observability.logging_utils import RunTracker
+from app.observability.logging_utils import RunTracker, log_event
 from app.rag.embeddings import cosine_similarity_matrix, embed_texts
 from app.schemas.generate import Question
 from app.schemas.pipeline import RelevanceScores
@@ -40,13 +40,21 @@ def score_relevance(topic: str, questions: list[Question], tracker: RunTracker) 
 def check_duplication(questions: list[Question], tracker: RunTracker) -> tuple[float, bool]:
     """Pure function - no LLM call. Reuses the same embedding function as
     the agent's dedupe step (RAG use #2) to report the worst-case pairwise
-    similarity across the final set."""
+    similarity across the final set. This is eval - a report, not
+    enforcement - so an embedding failure degrades to "nothing flagged"
+    rather than failing the whole generate request."""
     start = time.perf_counter()
     if len(questions) < 2:
         tracker.record_step("eval_duplication", (time.perf_counter() - start) * 1000)
         return 0.0, False
 
-    vectors = embed_texts([q.question for q in questions])
+    try:
+        vectors = embed_texts([q.question for q in questions])
+    except Exception as e:
+        log_event("eval_duplication_embedding_failed", error=str(e))
+        tracker.record_step("eval_duplication", (time.perf_counter() - start) * 1000)
+        return 0.0, False
+
     similarity = cosine_similarity_matrix(vectors)
     n = len(questions)
     max_similarity = max(similarity[i, j] for i in range(n) for j in range(n) if i != j)

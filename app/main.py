@@ -9,6 +9,9 @@ from app.auth.routes import router as auth_router
 from app.config import settings
 from app.db import engine, init_db
 from app.models.question_cache import QuestionSetCache  # noqa: F401 - registers the table with SQLModel.metadata
+from app.models.search_history import SearchHistory  # noqa: F401 - registers the table with SQLModel.metadata
+from app.models.subtopic_progress import SubtopicProgress  # noqa: F401 - registers the table with SQLModel.metadata
+from app.models.topic_label import TopicLabel  # noqa: F401 - registers the table with SQLModel.metadata
 from app.models.user import User, UserStatus
 from app.observability.logging_utils import configure_json_logging
 from app.rag.corpus import build_reference_index

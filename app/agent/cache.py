@@ -8,17 +8,13 @@ the same entry; "SQL" and "SQL joins" do not. That's a deliberate v1
 simplification, not an oversight.
 """
 
-import re
 import time
 
 from sqlmodel import Session, select
 
 from app.models.question_cache import QuestionSetCache
 from app.schemas.pipeline import GenerateResult, RunMetrics
-
-
-def normalize_topic(topic: str) -> str:
-    return re.sub(r"\s+", " ", topic.strip().lower())
+from app.topic_key import normalize_topic
 
 
 def get_cached_result(topic: str, session: Session) -> GenerateResult | None:
