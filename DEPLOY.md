@@ -38,13 +38,13 @@ Tracking doc for going live: Render (backend web service + frontend static site)
 
 ## Phase 4 — Frontend goes live **[MANUAL]**
 
-- [ ] In the Render dashboard: **New > Blueprint**, pick the `prep-app-ui` repo
-- [ ] Deploy, wait for the build to finish
-- [ ] **Give me the resulting frontend URL** (looks like `https://prep-app-ui-xxxx.onrender.com`)
+- [x] Deployed manually (Static Site wizard, not Blueprint) - `https://prep-app-ui.onrender.com`
+- [x] Fixed real deploy issue: Render's default Node (24.14.1) didn't meet Angular CLI's minimum - pinned via `.node-version`/`NODE_VERSION`/`package.json engines`, confirmed live in build logs
+- [x] Fixed real deploy issue: root `/` worked but `/login`, `/generate` 404'd - manually-created static sites don't read `render.yaml`'s `routes`, so the SPA rewrite rule (`/*` -> `/index.html`, Rewrite) had to be added by hand in Settings -> Redirects/Rewrites. Verified: both routes now return 200.
 
 ## Phase 5 — Lock CORS to the real frontend origin **[MANUAL]**
 
-- [ ] In the Render dashboard, on the **backend** service's Environment tab, set `CORS_ALLOW_ORIGINS` to the exact frontend URL from Phase 4 (no trailing slash)
+- [ ] In the Render dashboard, on the **backend** service's Environment tab, set `CORS_ALLOW_ORIGINS` to `https://prep-app-ui.onrender.com` (no trailing slash)
 - [ ] Save - Render redeploys the backend automatically with the new value
 
 ## Phase 6 — Verify (me, remotely, once both URLs exist)
