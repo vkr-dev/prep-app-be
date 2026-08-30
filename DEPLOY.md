@@ -10,7 +10,7 @@ Tracking doc for going live: Render (backend web service + frontend static site)
 - [x] Pin the Python runtime (`.python-version` + `PYTHON_VERSION` env var in render.yaml) to `3.10.13` - matches what's actually been tested locally, not context.md's original 3.11 aspiration
 - [x] Confirm `CORS_ALLOW_ORIGINS` and `DATABASE_URL` are already env-driven (`app/config.py`) - no code change needed to lock them down per-environment
 - [x] Confirm `/api/health` is public and unauthenticated (already true, built on Day 1) - this is what Render's health check will hit
-- [ ] Commit + push these files
+- [x] Commit + push these files
 
 ## Phase 2 — Backend goes live **[MANUAL from here]**
 
