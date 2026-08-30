@@ -70,7 +70,7 @@ scripts/hash_password.py   generates OWNER_PASSWORD_HASH
 
 `POST /api/generate` runs a plain-Python agent loop, no framework:
 
-1. **RAG retrieve** - embed the topic, pull the 4 nearest chunks from a small seed corpus (`app/rag/seed_corpus.py`) via a local Chroma collection (ephemeral, rebuilt from the seed corpus on every startup).
+1. **RAG retrieve** - embed the topic, pull the 4 nearest chunks from a small seed corpus (`app/rag/seed_corpus.py`) via a local Chroma collection (ephemeral, rebuilt from the seed corpus on every startup). Embeddings come from Google's embedding API (`app/rag/embeddings.py`), not a locally-loaded model - a local ONNX model needs enough RAM (onnxruntime + loaded weights) to blow past Render free tier's 512MB cap, confirmed live. This makes `GOOGLE_API_KEY` required regardless of which `LLM_PROVIDER` handles question generation - Anthropic has no first-party embeddings endpoint.
 2. **Plan** - the LLM breaks the topic into 4-6 subtopics.
 3. **Generate** - the LLM generates questions across those subtopics, grounded in the retrieved reference chunks. Over-generates a few extra, since dedup will remove some.
 4. **Dedupe/refine** - candidate questions are embedded (same Chroma embedding function as step 1) and near-duplicates (cosine similarity > 0.88) are dropped. If that drops the count below target, one more LLM call tops it back up, explicitly told what's already covered.

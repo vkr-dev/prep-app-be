@@ -11,6 +11,7 @@ Tracking doc for going live: Render (backend web service + frontend static site)
 - [x] Confirm `CORS_ALLOW_ORIGINS` and `DATABASE_URL` are already env-driven (`app/config.py`) - no code change needed to lock them down per-environment
 - [x] Confirm `/api/health` is public and unauthenticated (already true, built on Day 1) - this is what Render's health check will hit
 - [x] Commit + push these files
+- [x] **Fix real deploy failure**: first live attempt hit `Out of memory (used over 512Mi)` during startup - Chroma's default embedding function loads a local ONNX model (onnxruntime + model weights), comfortably 150-400MB, which alone blew past Render free tier's 512MB cap. Replaced it with Google's embedding API (`app/rag/embeddings.py`) - same interface, dramatically smaller memory footprint, verified live. **This makes `GOOGLE_API_KEY` required in every deploy from now on, regardless of which `LLM_PROVIDER` handles question generation** - Anthropic has no first-party embeddings endpoint, so Google is the only free API-based embedding option in this stack.
 
 ## Phase 2 — Backend goes live **[MANUAL from here]**
 
@@ -19,8 +20,8 @@ Tracking doc for going live: Render (backend web service + frontend static site)
 - [ ] In the Render dashboard: **New > Blueprint**, pick the `prep-app-be` repo. Render reads `render.yaml` automatically and shows the service it's about to create.
 - [ ] When prompted for the `sync: false` env vars, paste in the **real** values (from your local `.env` - same values, this is not a new set of secrets):
   - `LLM_PROVIDER`
-  - `ANTHROPIC_API_KEY`
-  - `GOOGLE_API_KEY`
+  - `ANTHROPIC_API_KEY` (only if `LLM_PROVIDER=1`)
+  - `GOOGLE_API_KEY` (**always required** - RAG/dedup embeddings use it regardless of `LLM_PROVIDER`, see above)
   - `JWT_SECRET`
   - `OWNER_EMAIL`
   - `OWNER_PASSWORD_HASH`
@@ -55,5 +56,5 @@ Tracking doc for going live: Render (backend web service + frontend static site)
 
 ## Known, accepted tradeoffs (already in context.md, not new)
 
-- **Cold start**: Render's free tier spins the backend down after 15 min idle; the next request pays a 30-60s wake-up cost. On top of that, this app's RAG index rebuilds from the seed corpus on every startup, and Chroma's embedding model downloads (~80MB) on a fresh container if it's not already cached in the container's filesystem - so a genuinely cold start could take noticeably longer than a typical Render free-tier wake-up. Acceptable for personal use; a cron keep-alive ping or the $7/mo tier removes it, per context.md.
-- **No persistent disk on the free web service** - each fresh deploy/restart re-downloads the Chroma embedding model. Doesn't affect correctness, just adds to cold-start time.
+- **Cold start**: Render's free tier spins the backend down after 15 min idle; the next request pays a 30-60s wake-up cost, plus this app's RAG index rebuilding from the seed corpus (a handful of embedding API calls, not a local model load anymore - fast). Acceptable for personal use; a cron keep-alive ping or the $7/mo tier removes it, per context.md.
+- **RAG/dedup embeddings now depend on Google's API being reachable and `GOOGLE_API_KEY` being valid**, even when `LLM_PROVIDER=1` (Anthropic) handles the actual question generation. A Google outage or bad key would break retrieval/dedup even on the Anthropic path. Acceptable tradeoff for fitting in 512MB; worth knowing if something breaks that isn't obviously "the LLM provider."

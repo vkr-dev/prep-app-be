@@ -14,7 +14,9 @@ services:
         value: 3.10.13
 
       # "1" = Anthropic, "2" = Google - see app/llm/client.py. Only the
-      # active provider's key below needs a real value.
+      # active provider's key needs a real value for TEXT GENERATION -
+      # but GOOGLE_API_KEY is required either way, since RAG/dedup
+      # embeddings always use Google's API (see app/rag/embeddings.py).
       - key: LLM_PROVIDER
         sync: false
       - key: ANTHROPIC_API_KEY
