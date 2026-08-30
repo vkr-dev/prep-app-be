@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: prep-app-be
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      # Pinned to match what's actually been tested locally (venv is 3.10.0),
+      # not context.md's original 3.11 aspiration - safer than introducing
+      # an untested runtime at deploy time.
+      - key: PYTHON_VERSION
+        value: 3.10.13
+
+      # anthropic or google - see app/llm/client.py. Only the active
+      # provider's key below needs a real value.
+      - key: LLM_PROVIDER
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-5
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GOOGLE_MODEL
+        value: gemini-3.6-flash
+
+      - key: JWT_SECRET
+        sync: false
+      - key: OWNER_EMAIL
+        sync: false
+      - key: OWNER_PASSWORD_HASH
+        sync: false
+
+      - key: DATABASE_URL
+        sync: false
+
+      # Set to the deployed frontend's exact Render URL once it exists -
+      # see prep-app-ui's render.yaml. Not knowable until that's deployed.
+      - key: CORS_ALLOW_ORIGINS
+        sync: false
