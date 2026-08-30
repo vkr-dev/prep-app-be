@@ -13,7 +13,7 @@ cp .env.example .env
 
 Fill in `.env`:
 
-- `LLM_PROVIDER` - `anthropic` or `google`. Only that provider's key below needs to be set.
+- `LLM_PROVIDER` - `1` (Anthropic) or `2` (Google). Only that provider's key below needs to be set.
 - `ANTHROPIC_API_KEY` - from console.anthropic.com (separate from Claude.ai / Claude Code auth).
 - `GOOGLE_API_KEY` - from aistudio.google.com, free tier. Good for dev/test iteration without spending Anthropic credit - same pipeline, same schemas, just cheaper/faster for exploratory runs.
 - `JWT_SECRET` - `python -c "import secrets; print(secrets.token_urlsafe(32))"`

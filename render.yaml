@@ -13,8 +13,8 @@ services:
       - key: PYTHON_VERSION
         value: 3.10.13
 
-      # anthropic or google - see app/llm/client.py. Only the active
-      # provider's key below needs a real value.
+      # "1" = Anthropic, "2" = Google - see app/llm/client.py. Only the
+      # active provider's key below needs a real value.
       - key: LLM_PROVIDER
         sync: false
       - key: ANTHROPIC_API_KEY

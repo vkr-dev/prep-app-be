@@ -5,10 +5,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # --- LLM ---
-    # "anthropic" or "google" - selects which app/llm/*_client.py implements
-    # call_structured() for every pipeline step. See app/llm/client.py.
-    # Swap providers with this one setting, no code change.
-    llm_provider: str = "anthropic"
+    # "1" = Anthropic, "2" = Google - selects which app/llm/*_client.py
+    # implements call_structured() for every pipeline step. See
+    # app/llm/client.py. Swap providers with this one setting, no code change.
+    llm_provider: str = "1"
 
     # Only the active provider's key needs to actually be set - both default
     # to empty so an unused provider never blocks startup.
