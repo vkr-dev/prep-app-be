@@ -23,7 +23,6 @@ from datetime import datetime  # noqa: E402
 from sqlmodel import Session, select  # noqa: E402
 
 from app.agent.cache import save_to_cache  # noqa: E402
-from app.config import settings  # noqa: E402
 from app.db import engine, init_db  # noqa: E402
 from app.models.question_cache import QuestionSetCache  # noqa: E402, F401
 from app.models.search_history import SearchHistory  # noqa: E402
@@ -3006,15 +3005,39 @@ def upsert_search_history(session: Session, user_id: int, topic_key: str) -> Non
     session.commit()
 
 
+# Search history for curated topics is seeded for every one of these user
+# IDs, not just whichever account happens to match OWNER_EMAIL - the seed
+# script's default bootstrap owner (id 1, owner@example.com) and this
+# project's real, actually-used login (id 2, vkr32856@gmail.com) are two
+# separate accounts, and both should see the curated topics in their own
+# past searches, not just one of them.
+SEARCH_HISTORY_USER_IDS = [1, 2]
+
+
+def upsert_search_history_for_users(session: Session, user_ids: list[int], topic_key: str) -> list[int]:
+    """Seeds search history for every ID in user_ids that actually exists,
+    skipping (and reporting) any that don't - never raises for a missing
+    ID, since which accounts exist can vary between environments."""
+    found: list[int] = []
+    for user_id in user_ids:
+        user = session.get(User, user_id)
+        if user is None:
+            continue
+        found.append(user_id)
+        upsert_search_history(session, user_id, topic_key)
+    return found
+
+
 def main() -> None:
     init_db()
 
     with Session(engine) as session:
-        owner = session.exec(select(User).where(User.email == settings.owner_email)).first()
-        if owner is None:
+        missing = [uid for uid in SEARCH_HISTORY_USER_IDS if session.get(User, uid) is None]
+        if missing:
             raise SystemExit(
-                f"No owner user found for {settings.owner_email!r} - start the app once first "
-                "so it bootstraps the owner account, then re-run this script."
+                f"No user found for id(s) {missing} - start the app once first so it bootstraps "
+                "the owner account, and make sure every ID in SEARCH_HISTORY_USER_IDS actually "
+                "exists in the user table before re-running this script."
             )
 
         for topic_data in TOPICS:
@@ -3024,15 +3047,19 @@ def main() -> None:
             # Same code path as a real cache write - no LLM call anywhere in this script.
             save_to_cache(topic_data["topic"], result, session)
             upsert_topic_label(session, key, topic_data["topic"], topic_data["short_label"], topic_data["category"])
-            upsert_search_history(session, owner.id, key)
+            seeded_for = upsert_search_history_for_users(session, SEARCH_HISTORY_USER_IDS, key)
 
             question_count = sum(len(s["questions"]) for s in topic_data["subtopics"])
             print(
                 f"Seeded {topic_data['topic']!r}: {len(topic_data['subtopics'])} subtopics, "
-                f"{question_count} questions, category={topic_data['category']!r}"
+                f"{question_count} questions, category={topic_data['category']!r}, "
+                f"search history for user ids {seeded_for}"
             )
 
-    print("\nDone. These topics will now show as instant, zero-cost cache hits, and appear in the owner's past searches.")
+    print(
+        "\nDone. These topics will now show as instant, zero-cost cache hits, and appear in the "
+        f"past searches of user ids {SEARCH_HISTORY_USER_IDS}."
+    )
 
 
 if __name__ == "__main__":
