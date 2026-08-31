@@ -45,7 +45,7 @@ curl -s -X POST http://localhost:8000/api/generate \
   -d '{"topic": "SQL"}'
 ```
 
-Guest flow: `POST /api/auth/register` -> owner calls `POST /api/auth/approve/{user_id}` (1-hour window starts now) -> guest's existing token starts passing the guard. `POST /api/auth/revoke/{user_id}` cuts it off immediately.
+Guest flow: `POST /api/auth/register` -> owner calls `POST /api/auth/approve/{user_id}` (1-hour window starts now) -> guest's existing token starts passing the guard. `POST /api/auth/revoke/{user_id}` cuts it off immediately. `GET /api/auth/users` lists every non-owner account (pending/approved/revoked) - this is what the frontend's `/admin` page (owner-only, see prep-app-ui's README) is actually built on, so approving a guest is a click in the UI rather than a manual API call. The 1-hour window is enforced by timestamp on every single protected request via `get_current_user()`, not just checked at login - access dies mid-session the instant `access_expires_at` passes, whether or not the user does anything to trigger it.
 
 ## Structure
 

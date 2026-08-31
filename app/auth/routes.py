@@ -52,6 +52,18 @@ def list_pending(_: User = Depends(require_owner), session: Session = Depends(ge
     return session.exec(select(User).where(User.status == UserStatus.pending)).all()
 
 
+@router.get("/users", response_model=list[UserPublic])
+def list_users(_: User = Depends(require_owner), session: Session = Depends(get_session)):
+    """Every account except the owner's own, newest-first - what the admin
+    page's approve/revoke UI is actually built on. /pending above still
+    exists as a narrower, single-purpose listing; this is the one the
+    frontend uses so a single page can show pending AND already-approved
+    accounts (needed to expose revoke, not just approve) in one place."""
+    return session.exec(
+        select(User).where(User.status != UserStatus.owner).order_by(User.created_at.desc())
+    ).all()
+
+
 @router.post("/approve/{user_id}", response_model=UserPublic)
 def approve(user_id: int, _: User = Depends(require_owner), session: Session = Depends(get_session)):
     user = session.get(User, user_id)
