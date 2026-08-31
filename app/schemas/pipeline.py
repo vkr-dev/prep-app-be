@@ -3,6 +3,14 @@ from pydantic import BaseModel, Field
 from app.schemas.generate import Difficulty, Question
 
 
+class TopicSafetyResult(BaseModel):
+    """Output of the topic safety classifier - see app/safety.py. Runs
+    before the agent loop even starts, not part of it."""
+
+    safe: bool
+    reason: str = Field(default="", description="Brief internal reason if unsafe, empty if safe - never shown to the user")
+
+
 class SubtopicPlan(BaseModel):
     """Output of the plan step - agent loop step 1."""
 

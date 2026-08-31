@@ -93,6 +93,14 @@ A failed provider call (bad key, rate limit, outage) surfaces as `502` with a `{
 
 There's no cache invalidation yet - an entry lives forever until manually deleted from the table. Fine for now; a "regenerate" bypass is an easy follow-up if question sets need to be refreshed later.
 
+## Input safety guardrail
+
+`POST /api/generate`'s `topic` field is the only free-text user input anywhere in this app, so it's the one thing that needs a content guardrail before anything else runs (`app/safety.py`, `check_topic_safety()`). Two layers, defense in depth: a fast, zero-cost keyword pre-check catches blatant explicit-content requests with no LLM call at all, and an LLM classification call catches subtler attempts - indirect phrasing, or a prompt trying to get the model to ignore its instructions and produce something unrelated to legitimate interview prep. Either layer rejects before `record_search()`, the cache lookup, or the pipeline ever run - a rejected topic is never saved to search history, never cached, and never spends a real generation call.
+
+This is the one LLM-dependent step in the whole app that fails **closed**, not open - every other step (RAG retrieval, dedupe, topic labeling, the explain step) degrades gracefully to a safe default if its LLM call fails, since a missed enhancement is an acceptable availability tradeoff. A safety check that couldn't run is not the same as one that passed, so a classifier failure here is treated as a rejection too, not silently skipped.
+
+The user-facing rejection is a deliberately terse, uniform `400` with body `{"detail": "NO"}` - identical regardless of which layer caught it or why, on purpose: not revealing the reason is itself part of the guardrail, since it gives nothing away that would help someone iterate their way past it. The real reason (keyword match, classifier's stated reason, or the underlying provider error) is still captured server-side via structured `log_event()` calls for the owner's own visibility.
+
 ## Per-user search history + AI topic categorization
 
 `POST /api/generate` also records the search into `GET /api/search-history` (`app/history/service.py`) - unlike the question cache, this table (`searchhistory`) is per-user, since it's each user's own list of past searches. Re-searching a topic bumps its timestamp rather than duplicating it.

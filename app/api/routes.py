@@ -13,6 +13,7 @@ from app.history.service import get_search_history, record_search
 from app.llm.client import LlmOutputError
 from app.models.user import User
 from app.observability.logging_utils import log_event
+from app.safety import REJECTION_MESSAGE, TopicUnsafeError, check_topic_safety
 from app.schemas.generate import GenerateRequest
 from app.schemas.pipeline import GenerateResult
 from app.schemas.progress import ProgressResponse, ProgressUpdateRequest
@@ -60,6 +61,15 @@ def generate(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    # Safety guardrail runs first, before anything else - a rejected topic
+    # must never be recorded in search history, never cached, and never
+    # reach the pipeline. See app/safety.py for why this is the one step in
+    # the whole app that fails closed instead of degrading gracefully.
+    try:
+        check_topic_safety(payload.topic)
+    except TopicUnsafeError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, REJECTION_MESSAGE)
+
     # A search happened regardless of what follows - record it (and, only
     # for a genuinely new topic, categorize it via one small LLM call). This
     # is a nice-to-have side effect, not core to generating questions, so a

@@ -25,6 +25,10 @@ class GenerateRequest(BaseModel):
     @field_validator("topic")
     @classmethod
     def limit_words(cls, v: str) -> str:
+        # min_length=1 above only rejects a truly empty string - "   " has
+        # length 3 and would otherwise pass straight through.
+        if not v.strip():
+            raise ValueError("Topic cannot be blank")
         word_count = len(v.split())
         if word_count > MAX_TOPIC_WORDS:
             raise ValueError(f"Topic must be {MAX_TOPIC_WORDS} words or fewer (got {word_count})")
