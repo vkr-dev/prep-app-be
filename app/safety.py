@@ -18,6 +18,24 @@ category - is an acceptable tradeoff for availability. Letting disallowed
 content through because a safety check happened to fail is not the same
 kind of tradeoff, so it isn't treated the same way.
 
+This also means the classifier call deliberately does NOT go through
+app.llm.client's swappable LLM_PROVIDER selector the way every other step
+in this app does - it always calls Google directly, never Anthropic (real
+per-token cost, avoided here on purpose) and never Groq. Confirmed live:
+Groq's qwen3.6-27b consistently (not intermittently) fails to produce
+valid structured output for this specific classification prompt, even
+after call_structured()'s own internal retry - a 100% failure rate that,
+combined with fail-closed, meant every single new topic search was being
+rejected outright while LLM_PROVIDER=3 was active, regardless of the
+topic's actual content. Google is already a hard, unconditional dependency
+of this app regardless of LLM_PROVIDER (see app/rag/embeddings.py), so
+routing this one small, cheap call (max_tokens=200) through it too doesn't
+introduce a new dependency, just reuses one that's already required. If
+GOOGLE_API_KEY's quota is exhausted or the key is missing, this still
+fails closed rather than crashing - the call raises a normal exception
+here, logged and rejected the same as any other classifier failure, not a
+startup crash.
+
 The user-facing rejection is deliberately terse and uniform ("NO") for
 every rejection reason - keyword match, classifier flag, or classifier
 failure all look identical from the outside. Not revealing which layer
@@ -28,7 +46,10 @@ still captured server-side via log_event() for the owner's own visibility.
 
 import re
 
-from app.llm.client import call_structured
+# Deliberately NOT app.llm.client's swappable call_structured() - see the
+# module docstring for why this one call always uses Google directly,
+# independent of whatever LLM_PROVIDER the main pipeline is configured for.
+from app.llm.google_client import call_structured
 from app.observability.logging_utils import log_event
 from app.schemas.pipeline import TopicSafetyResult
 
@@ -86,7 +107,7 @@ def check_topic_safety(topic: str) -> None:
     user_message = f"Topic: {topic}"
 
     try:
-        result = call_structured(system, user_message, TopicSafetyResult, max_tokens=60)
+        result = call_structured(system, user_message, TopicSafetyResult, max_tokens=200)
     except Exception as e:
         # Fail CLOSED, unlike every other LLM step in this app - see the
         # module docstring. A safety check that couldn't run is not the
