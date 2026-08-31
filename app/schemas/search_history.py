@@ -1,6 +1,9 @@
 from datetime import datetime
+from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
+
+from app.schemas.utc import serialize_naive_utc
 
 
 class TopicLabelResult(BaseModel):
@@ -21,6 +24,11 @@ class SearchHistoryItem(BaseModel):
     short_label: str
     category: str
     last_searched_at: datetime
+
+    # last_searched_at is a naive UTC datetime - see app/schemas/utc.py.
+    @field_serializer("last_searched_at")
+    def _serialize_last_searched_at(self, value: datetime) -> str:
+        return serialize_naive_utc(value)
 
 
 class SearchHistoryGroup(BaseModel):
