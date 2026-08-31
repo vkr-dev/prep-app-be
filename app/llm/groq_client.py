@@ -5,11 +5,23 @@ providers (same LlmCallResult, same LlmOutputError).
 
 Groq's API is OpenAI-compatible: chat.completions.create() with a
 response_format of {"type": "json_schema", "json_schema": {...}}. Its
-strict JSON-schema mode requires additionalProperties: false on every
-object in the schema, including nested $defs - Pydantic's
-model_json_schema() doesn't set that automatically, so it's injected here
-(confirmed live: without it, Groq returns a 400 naming the exact $defs
-path that's missing it).
+strict JSON-schema mode requires two things Pydantic's model_json_schema()
+doesn't set automatically, both injected here:
+
+1. additionalProperties: false on every object in the schema, including
+   nested $defs (confirmed live: without it, Groq returns a 400 naming the
+   exact $defs path that's missing it).
+2. Every property listed in that object's `required` array - including
+   ones with a Python-side default value. Pydantic's default schema
+   generation omits a field from `required` whenever it has a default
+   (correctly, from a plain-JSON-Schema perspective), but Groq's strict
+   mode rejects that outright: it demands every property be required, with
+   no concept of "optional with a default" at the schema level (confirmed
+   live: a schema with one defaulted field, like TopicSafetyResult's
+   `reason: str = Field(default="")`, failed with "the following
+   properties must be listed in required"). The Python-side default still
+   works exactly as before for any other caller of that same model - this
+   only affects the schema shown to Groq, not the model's own semantics.
 
 Default model is qwen/qwen3.6-27b, not one of the openai/gpt-oss-* models
 also available on this account - both gpt-oss-120b and gpt-oss-20b were
@@ -75,6 +87,22 @@ def _enforce_additional_properties_false(schema: Any) -> Any:
     return schema
 
 
+def _enforce_all_properties_required(schema: Any) -> Any:
+    """Groq's strict mode has no concept of an optional/defaulted property -
+    every key in `properties` must also appear in `required`, recursively,
+    including nested $defs. See the module docstring for why this doesn't
+    change the Pydantic model's own Python-side default semantics."""
+    if isinstance(schema, dict):
+        if "properties" in schema:
+            schema["required"] = list(schema["properties"].keys())
+        for value in schema.values():
+            _enforce_all_properties_required(value)
+    elif isinstance(schema, list):
+        for item in schema:
+            _enforce_all_properties_required(item)
+    return schema
+
+
 def _retry_after_seconds(error: RateLimitError) -> float | None:
     header = error.response.headers.get("retry-after")
     if header is None:
@@ -86,7 +114,7 @@ def _retry_after_seconds(error: RateLimitError) -> float | None:
 
 
 def call_structured(system: str, user_message: str, output_format: type[T], max_tokens: int = 4096) -> LlmCallResult:
-    schema = _enforce_additional_properties_false(output_format.model_json_schema())
+    schema = _enforce_all_properties_required(_enforce_additional_properties_false(output_format.model_json_schema()))
     safe_max_tokens = min(max_tokens, MAX_SAFE_TOKENS)
     start = time.perf_counter()
     last_error: Exception | None = None

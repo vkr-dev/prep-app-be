@@ -61,10 +61,32 @@ def generate(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    # Safety guardrail runs first, before anything else - a rejected topic
-    # must never be recorded in search history, never cached, and never
-    # reach the pipeline. See app/safety.py for why this is the one step in
-    # the whole app that fails closed instead of degrading gracefully.
+    # Cache lookup runs BEFORE the safety check, deliberately - a cache hit
+    # (curated or a prior real pipeline run) was already either hand-authored
+    # or already passed this exact check the first time it was ever
+    # generated, so there's nothing to re-check. This matters beyond just
+    # saving a redundant call: the safety classifier fails closed (see
+    # app/safety.py), so running it unconditionally on every request would
+    # mean a transient classifier hiccup could intermittently reject even a
+    # previously-safe, already-cached topic - confirmed live, this
+    # regression is real, not hypothetical, given the current default
+    # provider's known structured-output flakiness. Skipping the check
+    # entirely on a cache hit removes that exposure from the common path
+    # without weakening the guarantee: every topic that ever reaches the
+    # pipeline for the first time still goes through the check below.
+    cached = get_cached_result(payload.topic, session)
+    if cached is not None:
+        try:
+            record_search(current_user.id, payload.topic, session)
+        except Exception as e:
+            log_event("search_history_record_failed", topic=payload.topic, error=str(e))
+        return cached
+
+    # Safety guardrail runs before anything else touches a genuinely new
+    # topic - it must never be recorded in search history, never cached,
+    # and never reach the pipeline. See app/safety.py for why this is the
+    # one step in the whole app that fails closed instead of degrading
+    # gracefully.
     try:
         check_topic_safety(payload.topic)
     except TopicUnsafeError:
@@ -79,12 +101,6 @@ def generate(
         record_search(current_user.id, payload.topic, session)
     except Exception as e:
         log_event("search_history_record_failed", topic=payload.topic, error=str(e))
-
-    # Shared cache, not per-user: the first person to ask about a topic pays
-    # the LLM cost; everyone after that (any user) gets it for free.
-    cached = get_cached_result(payload.topic, session)
-    if cached is not None:
-        return cached
 
     try:
         result = run_pipeline(payload.topic)
