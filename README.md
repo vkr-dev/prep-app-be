@@ -1,6 +1,6 @@
 # prep-app-be
 
-FastAPI backend for the Learning Tool - an interview-prep question generator.
+FastAPI backend for the Learning Tool.
 
 ## What it does
 
