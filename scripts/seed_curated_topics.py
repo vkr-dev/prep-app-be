@@ -3467,10 +3467,9 @@ def upsert_search_history(session: Session, user_id: int, topic_key: str) -> Non
 
 # Search history for curated topics is seeded for every one of these user
 # IDs, not just whichever account happens to match OWNER_EMAIL - the seed
-# script's default bootstrap owner (id 1, owner@example.com) and this
-# project's real, actually-used login (id 2, vkr32856@gmail.com) are two
-# separate accounts, and both should see the curated topics in their own
-# past searches, not just one of them.
+# script's default bootstrap owner (id 1) and the actual day-to-day login
+# used during development (id 2) are two separate accounts, and both should
+# see the curated topics in their own past searches, not just one of them.
 SEARCH_HISTORY_USER_IDS = [1, 2]
 
 
