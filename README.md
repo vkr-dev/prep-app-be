@@ -16,6 +16,8 @@ Given any topic, produces a complete study set for it: subtopics, each with a wr
 
 Every step is instrumented - per-step latency and token usage is captured and logged as structured JSON, and returned with the response. Results are cached per topic (Postgres) so the same topic is never regenerated twice, and a set of core topics ships with hand-authored, pre-loaded content that is indistinguishable in shape from generated output. Every free-text topic also passes through a two-layer AI safety classifier before it ever reaches the pipeline.
 
+A separate **Hybrid Search** feature (`/api/quick-search`) runs hybrid retrieval over the same reference corpus: BM25 keyword search (OpenSearch) and vector search (the same Chroma index/embeddings above) fused via reciprocal-rank or weighted fusion, with an optional LLM re-ranking pass, and search-quality evaluation (NDCG@k, Precision@k, Recall@k) against a small hand-labeled query set. Entirely additive - a separate router, its own OpenSearch dependency (local via Docker, see `docker-compose.yml`), no changes to any existing route or table.
+
 ## Tech stack
 
 - **Framework**: FastAPI (Python), fully async-capable REST API.
@@ -27,5 +29,6 @@ Every step is instrumented - per-step latency and token usage is captured and lo
 - **AI safety**: a fail-closed guardrail on all free-text input - a fast keyword pre-filter plus an LLM classification pass - that must explicitly pass before any generation call is made.
 - **Observability**: structured, per-step JSON logging (latency + token counts per LLM call) accumulated into a run-level report returned alongside every API response.
 - **Database/ORM**: Postgres (Neon) via SQLModel - backs the topic cache, category taxonomy, and per-user history.
+- **Hybrid search**: OpenSearch (BM25) for Hybrid Search's keyword leg, fused with the existing Chroma vector leg - local-only via Docker, opt-in, connects lazily so its absence never affects any other route.
 - **Auth**: JWT bearer tokens with bcrypt password hashing.
 - **Deployment**: Render.

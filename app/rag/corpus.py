@@ -57,3 +57,18 @@ def retrieve_reference_chunks(topic: str, k: int = 4) -> list[str]:
     except Exception as e:
         log_event("rag_retrieve_failed", topic=topic, error=str(e))
         return []
+
+
+def query_with_scores(query: str, k: int) -> list[tuple[str, str, float]]:
+    """Same collection, same embedding function as retrieve_reference_chunks
+    above - added for Quick Search's vector leg (app/search/vector_search.py),
+    which needs the chunk id and a similarity score per hit, not just the
+    bare text. Returns (id, text, similarity) tuples, highest similarity
+    first; similarity is 1/(1+distance) so it's monotonic regardless of
+    which distance metric the collection uses, and always in (0, 1]."""
+    collection = _client.get_collection(_COLLECTION_NAME, embedding_function=embedding_fn)
+    result = collection.query(query_texts=[query], n_results=k, include=["documents", "distances"])
+    ids = (result.get("ids") or [[]])[0]
+    documents = (result.get("documents") or [[]])[0]
+    distances = (result.get("distances") or [[]])[0]
+    return [(i, doc, 1.0 / (1.0 + dist)) for i, doc, dist in zip(ids, documents, distances)]

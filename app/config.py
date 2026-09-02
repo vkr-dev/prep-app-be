@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     # --- CORS ---
     cors_allow_origins: str = "http://localhost:4200"
 
+    # --- Quick Search (hybrid BM25 + vector) ---
+    # Local-only, opt-in feature - see docker-compose.yml. Nothing at app
+    # startup connects to this; app/search/opensearch_client.py connects
+    # lazily on first use, so a missing/stopped OpenSearch never affects any
+    # other route.
+    opensearch_url: str = "http://localhost:9200"
+    opensearch_index: str = "quick_search_corpus"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]

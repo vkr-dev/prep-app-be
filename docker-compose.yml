@@ -1,0 +1,26 @@
+# Local-only OpenSearch for the Quick Search feature (BM25 keyword
+# retrieval). Nothing else in this app depends on Docker or on this
+# service - the existing /api/generate pipeline, auth, and everything else
+# keep working with this stopped or never started at all.
+#
+# Usage:
+#   docker compose up -d
+#   .venv/Scripts/python.exe scripts/index_opensearch.py   # one-time (re-run after seed_corpus.py changes)
+#
+# Security plugin disabled deliberately - local dev only, never expose this
+# port outside localhost.
+services:
+  opensearch:
+    image: opensearchproject/opensearch:2.17.1
+    container_name: prep-app-opensearch
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+
+volumes:
+  opensearch-data:

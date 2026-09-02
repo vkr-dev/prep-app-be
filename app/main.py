@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 
+from app.api.quick_search_routes import router as quick_search_router
 from app.api.routes import router as api_router
 from app.auth.routes import router as auth_router
 from app.config import settings
@@ -55,3 +56,4 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(api_router)
+app.include_router(quick_search_router)
